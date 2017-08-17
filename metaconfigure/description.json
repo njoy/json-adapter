@@ -130,7 +130,7 @@
     "src/doc/examples/type_name.cpp", 
     "src/doc/examples/unflatten.cpp"
   ], 
-  "include path": "src", 
+  "include path": "src/src", 
   "initialized": true, 
   "is external project": true, 
   "language": "c++", 
