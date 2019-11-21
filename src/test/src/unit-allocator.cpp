@@ -1,11 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 2.1.1
+|  |  |__   |  |  | | | |  version 3.7.3
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
-Copyright (c) 2013-2017 Niels Lohmann <http://nlohmann.me>.
+SPDX-License-Identifier: MIT
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -26,14 +27,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
 
 #define private public
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 using nlohmann::json;
+#undef private
 
+namespace
+{
 // special test case to check if memory is leaked if constructor throws
-
 template<class T>
 struct bad_allocator : std::allocator<T>
 {
@@ -43,6 +46,7 @@ struct bad_allocator : std::allocator<T>
         throw std::bad_alloc();
     }
 };
+}
 
 TEST_CASE("bad_alloc")
 {
@@ -59,17 +63,21 @@ TEST_CASE("bad_alloc")
               bad_allocator>;
 
         // creating an object should throw
-        CHECK_THROWS_AS(bad_json(bad_json::value_t::object), std::bad_alloc);
+        CHECK_THROWS_AS(bad_json(bad_json::value_t::object), std::bad_alloc&);
     }
 }
 
-static bool next_construct_fails = false;
-static bool next_destroy_fails = false;
-static bool next_deallocate_fails = false;
+namespace
+{
+bool next_construct_fails = false;
+bool next_destroy_fails = false;
+bool next_deallocate_fails = false;
 
 template<class T>
 struct my_allocator : std::allocator<T>
 {
+    using std::allocator<T>::allocator;
+
     template<class... Args>
     void construct(T* p, Args&& ... args)
     {
@@ -109,6 +117,12 @@ struct my_allocator : std::allocator<T>
             p->~T();
         }
     }
+
+    template <class U>
+    struct rebind
+    {
+        using other = my_allocator<U>;
+    };
 };
 
 // allows deletion of raw pointer, usually hold by json_value
@@ -119,6 +133,7 @@ void my_allocator_clean_up(T* p)
     my_allocator<T> alloc;
     alloc.destroy(p);
     alloc.deallocate(p, 1);
+}
 }
 
 TEST_CASE("controlled bad_alloc")
@@ -143,7 +158,7 @@ TEST_CASE("controlled bad_alloc")
                 auto t = my_json::value_t::object;
                 CHECK_NOTHROW(my_allocator_clean_up(my_json::json_value(t).object));
                 next_construct_fails = true;
-                CHECK_THROWS_AS(my_json::json_value(t), std::bad_alloc);
+                CHECK_THROWS_AS(my_json::json_value(t), std::bad_alloc&);
                 next_construct_fails = false;
             }
             SECTION("array")
@@ -152,7 +167,7 @@ TEST_CASE("controlled bad_alloc")
                 auto t = my_json::value_t::array;
                 CHECK_NOTHROW(my_allocator_clean_up(my_json::json_value(t).array));
                 next_construct_fails = true;
-                CHECK_THROWS_AS(my_json::json_value(t), std::bad_alloc);
+                CHECK_THROWS_AS(my_json::json_value(t), std::bad_alloc&);
                 next_construct_fails = false;
             }
             SECTION("string")
@@ -161,7 +176,7 @@ TEST_CASE("controlled bad_alloc")
                 auto t = my_json::value_t::string;
                 CHECK_NOTHROW(my_allocator_clean_up(my_json::json_value(t).string));
                 next_construct_fails = true;
-                CHECK_THROWS_AS(my_json::json_value(t), std::bad_alloc);
+                CHECK_THROWS_AS(my_json::json_value(t), std::bad_alloc&);
                 next_construct_fails = false;
             }
         }
@@ -172,32 +187,9 @@ TEST_CASE("controlled bad_alloc")
             my_json::string_t v("foo");
             CHECK_NOTHROW(my_allocator_clean_up(my_json::json_value(v).string));
             next_construct_fails = true;
-            CHECK_THROWS_AS(my_json::json_value(v), std::bad_alloc);
+            CHECK_THROWS_AS(my_json::json_value(v), std::bad_alloc&);
             next_construct_fails = false;
         }
-
-        /*
-                SECTION("json_value(const object_t&)")
-                {
-                    next_construct_fails = false;
-                    my_json::object_t v {{"foo", "bar"}};
-                    CHECK_NOTHROW(my_json::json_value j(v));
-                    next_construct_fails = true;
-                    CHECK_THROWS_AS(my_json::json_value j(v), std::bad_alloc);
-                    next_construct_fails = false;
-                }
-        */
-        /*
-                SECTION("json_value(const array_t&)")
-                {
-                    next_construct_fails = false;
-                    my_json::array_t v = {"foo", "bar", "baz"};
-                    CHECK_NOTHROW(my_json::json_value j(v));
-                    next_construct_fails = true;
-                    CHECK_THROWS_AS(my_json::json_value j(v), std::bad_alloc);
-                    next_construct_fails = false;
-                }
-        */
     }
 
     SECTION("class basic_json")
@@ -208,7 +200,7 @@ TEST_CASE("controlled bad_alloc")
             std::map<std::string, std::string> v {{"foo", "bar"}};
             CHECK_NOTHROW(my_json(v));
             next_construct_fails = true;
-            CHECK_THROWS_AS(my_json(v), std::bad_alloc);
+            CHECK_THROWS_AS(my_json(v), std::bad_alloc&);
             next_construct_fails = false;
         }
 
@@ -218,7 +210,7 @@ TEST_CASE("controlled bad_alloc")
             std::vector<std::string> v {"foo", "bar", "baz"};
             CHECK_NOTHROW(my_json(v));
             next_construct_fails = true;
-            CHECK_THROWS_AS(my_json(v), std::bad_alloc);
+            CHECK_THROWS_AS(my_json(v), std::bad_alloc&);
             next_construct_fails = false;
         }
 
@@ -227,7 +219,7 @@ TEST_CASE("controlled bad_alloc")
             next_construct_fails = false;
             CHECK_NOTHROW(my_json("foo"));
             next_construct_fails = true;
-            CHECK_THROWS_AS(my_json("foo"), std::bad_alloc);
+            CHECK_THROWS_AS(my_json("foo"), std::bad_alloc&);
             next_construct_fails = false;
         }
 
@@ -237,7 +229,7 @@ TEST_CASE("controlled bad_alloc")
             std::string s("foo");
             CHECK_NOTHROW(my_json(s));
             next_construct_fails = true;
-            CHECK_THROWS_AS(my_json(s), std::bad_alloc);
+            CHECK_THROWS_AS(my_json(s), std::bad_alloc&);
             next_construct_fails = false;
         }
     }

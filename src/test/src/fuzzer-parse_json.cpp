@@ -1,7 +1,7 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (fuzz test support)
-|  |  |__   |  |  | | | |  version 2.1.1
+|  |  |__   |  |  | | | |  version 3.7.3
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 This file implements a parser test suitable for fuzz testing. Given a byte
@@ -21,7 +21,7 @@ Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 
 #include <iostream>
 #include <sstream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -49,15 +49,19 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
             // serializations must match
             assert(s1 == s2);
         }
-        catch (const std::invalid_argument&)
+        catch (const json::parse_error&)
         {
             // parsing a JSON serialization must not fail
             assert(false);
         }
     }
-    catch (const std::invalid_argument&)
+    catch (const json::parse_error&)
     {
         // parse errors are ok, because input may be random bytes
+    }
+    catch (const json::out_of_range&)
+    {
+        // out of range errors may happen if provided sizes are excessive
     }
 
     // return 0 - non-zero return values are reserved for future use

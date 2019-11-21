@@ -1,11 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 2.1.1
+|  |  |__   |  |  | | | |  version 3.7.3
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
-Copyright (c) 2013-2017 Niels Lohmann <http://nlohmann.me>.
+SPDX-License-Identifier: MIT
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -26,30 +27,45 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
 
 #define private public
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 using nlohmann::json;
+#undef private
 
 TEST_CASE("JSON pointers")
 {
     SECTION("errors")
     {
-        CHECK_THROWS_AS(json::json_pointer("foo"), std::domain_error);
-        CHECK_THROWS_WITH(json::json_pointer("foo"), "JSON pointer must be empty or begin with '/'");
+        CHECK_THROWS_AS(json::json_pointer("foo"), json::parse_error&);
+        CHECK_THROWS_WITH(json::json_pointer("foo"),
+                          "[json.exception.parse_error.107] parse error at byte 1: JSON pointer must be empty or begin with '/' - was: 'foo'");
 
-        CHECK_THROWS_AS(json::json_pointer("/~~"), std::domain_error);
-        CHECK_THROWS_WITH(json::json_pointer("/~~"), "escape error: '~' must be followed with '0' or '1'");
+        CHECK_THROWS_AS(json::json_pointer("/~~"), json::parse_error&);
+        CHECK_THROWS_WITH(json::json_pointer("/~~"),
+                          "[json.exception.parse_error.108] parse error: escape character '~' must be followed with '0' or '1'");
 
-        CHECK_THROWS_AS(json::json_pointer("/~"), std::domain_error);
-        CHECK_THROWS_WITH(json::json_pointer("/~"), "escape error: '~' must be followed with '0' or '1'");
+        CHECK_THROWS_AS(json::json_pointer("/~"), json::parse_error&);
+        CHECK_THROWS_WITH(json::json_pointer("/~"),
+                          "[json.exception.parse_error.108] parse error: escape character '~' must be followed with '0' or '1'");
 
         json::json_pointer p;
-        CHECK_THROWS_AS(p.top(), std::domain_error);
-        CHECK_THROWS_WITH(p.top(), "JSON pointer has no parent");
-        CHECK_THROWS_AS(p.pop_back(), std::domain_error);
-        CHECK_THROWS_WITH(p.pop_back(), "JSON pointer has no parent");
+        CHECK_THROWS_AS(p.top(), json::out_of_range&);
+        CHECK_THROWS_WITH(p.top(),
+                          "[json.exception.out_of_range.405] JSON pointer has no parent");
+        CHECK_THROWS_AS(p.pop_back(), json::out_of_range&);
+        CHECK_THROWS_WITH(p.pop_back(),
+                          "[json.exception.out_of_range.405] JSON pointer has no parent");
+
+        SECTION("array index error")
+        {
+            json v = {1, 2, 3, 4};
+            json::json_pointer ptr("/10e");
+            CHECK_THROWS_AS(v[ptr], json::out_of_range&);
+            CHECK_THROWS_WITH(v[ptr],
+                              "[json.exception.out_of_range.404] unresolved reference token '10e'");
+        }
     }
 
     SECTION("examples from RFC 6901")
@@ -74,12 +90,18 @@ TEST_CASE("JSON pointers")
             // the whole document
             CHECK(j[json::json_pointer()] == j);
             CHECK(j[json::json_pointer("")] == j);
+            CHECK(j.contains(json::json_pointer()));
+            CHECK(j.contains(json::json_pointer("")));
 
             // array access
             CHECK(j[json::json_pointer("/foo")] == j["foo"]);
+            CHECK(j.contains(json::json_pointer("/foo")));
             CHECK(j[json::json_pointer("/foo/0")] == j["foo"][0]);
             CHECK(j[json::json_pointer("/foo/1")] == j["foo"][1]);
             CHECK(j["/foo/1"_json_pointer] == j["foo"][1]);
+            CHECK(j.contains(json::json_pointer("/foo/0")));
+            CHECK(j.contains(json::json_pointer("/foo/1")));
+            CHECK(not j.contains(json::json_pointer("/foo/-")));
 
             // checked array access
             CHECK(j.at(json::json_pointer("/foo/0")) == j["foo"][0]);
@@ -87,6 +109,8 @@ TEST_CASE("JSON pointers")
 
             // empty string access
             CHECK(j[json::json_pointer("/")] == j[""]);
+            CHECK(j.contains(json::json_pointer("")));
+            CHECK(j.contains(json::json_pointer("/")));
 
             // other cases
             CHECK(j[json::json_pointer("/ ")] == j[" "]);
@@ -95,6 +119,14 @@ TEST_CASE("JSON pointers")
             CHECK(j[json::json_pointer("/g|h")] == j["g|h"]);
             CHECK(j[json::json_pointer("/i\\j")] == j["i\\j"]);
             CHECK(j[json::json_pointer("/k\"l")] == j["k\"l"]);
+
+            // contains
+            CHECK(j.contains(json::json_pointer("/ ")));
+            CHECK(j.contains(json::json_pointer("/c%d")));
+            CHECK(j.contains(json::json_pointer("/e^f")));
+            CHECK(j.contains(json::json_pointer("/g|h")));
+            CHECK(j.contains(json::json_pointer("/i\\j")));
+            CHECK(j.contains(json::json_pointer("/k\"l")));
 
             // checked access
             CHECK(j.at(json::json_pointer("/ ")) == j[" "]);
@@ -107,24 +139,37 @@ TEST_CASE("JSON pointers")
             // escaped access
             CHECK(j[json::json_pointer("/a~1b")] == j["a/b"]);
             CHECK(j[json::json_pointer("/m~0n")] == j["m~n"]);
+            CHECK(j.contains(json::json_pointer("/a~1b")));
+            CHECK(j.contains(json::json_pointer("/m~0n")));
 
             // unescaped access
             // access to nonexisting values yield object creation
+            CHECK(not j.contains(json::json_pointer("/a/b")));
             CHECK_NOTHROW(j[json::json_pointer("/a/b")] = 42);
+            CHECK(j.contains(json::json_pointer("/a/b")));
             CHECK(j["a"]["b"] == json(42));
+
+            CHECK(not j.contains(json::json_pointer("/a/c/1")));
             CHECK_NOTHROW(j[json::json_pointer("/a/c/1")] = 42);
             CHECK(j["a"]["c"] == json({nullptr, 42}));
+            CHECK(j.contains(json::json_pointer("/a/c/1")));
+
+            CHECK(not j.contains(json::json_pointer("/a/d/-")));
             CHECK_NOTHROW(j[json::json_pointer("/a/d/-")] = 42);
+            CHECK(not j.contains(json::json_pointer("/a/d/-")));
             CHECK(j["a"]["d"] == json::array({42}));
             // "/a/b" works for JSON {"a": {"b": 42}}
             CHECK(json({{"a", {{"b", 42}}}})[json::json_pointer("/a/b")] == json(42));
 
             // unresolved access
             json j_primitive = 1;
-            CHECK_THROWS_AS(j_primitive["/foo"_json_pointer], std::out_of_range);
-            CHECK_THROWS_WITH(j_primitive["/foo"_json_pointer], "unresolved reference token 'foo'");
-            CHECK_THROWS_AS(j_primitive.at("/foo"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j_primitive.at("/foo"_json_pointer), "unresolved reference token 'foo'");
+            CHECK_THROWS_AS(j_primitive["/foo"_json_pointer], json::out_of_range&);
+            CHECK_THROWS_WITH(j_primitive["/foo"_json_pointer],
+                              "[json.exception.out_of_range.404] unresolved reference token 'foo'");
+            CHECK_THROWS_AS(j_primitive.at("/foo"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j_primitive.at("/foo"_json_pointer),
+                              "[json.exception.out_of_range.404] unresolved reference token 'foo'");
+            CHECK(not j_primitive.contains(json::json_pointer("/foo")));
         }
 
         SECTION("const access")
@@ -182,15 +227,18 @@ TEST_CASE("JSON pointers")
             CHECK(j[json::json_pointer("/m~0n")] == j["m~n"]);
 
             // unescaped access
-            CHECK_THROWS_AS(j.at(json::json_pointer("/a/b")), std::out_of_range);
-            CHECK_THROWS_WITH(j.at(json::json_pointer("/a/b")), "key 'a' not found");
+            CHECK_THROWS_AS(j.at(json::json_pointer("/a/b")), json::out_of_range&);
+            CHECK_THROWS_WITH(j.at(json::json_pointer("/a/b")),
+                              "[json.exception.out_of_range.403] key 'a' not found");
 
             // unresolved access
             const json j_primitive = 1;
-            CHECK_THROWS_AS(j_primitive["/foo"_json_pointer], std::out_of_range);
-            CHECK_THROWS_WITH(j_primitive["/foo"_json_pointer], "unresolved reference token 'foo'");
-            CHECK_THROWS_AS(j_primitive.at("/foo"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j_primitive.at("/foo"_json_pointer), "unresolved reference token 'foo'");
+            CHECK_THROWS_AS(j_primitive["/foo"_json_pointer], json::out_of_range&);
+            CHECK_THROWS_WITH(j_primitive["/foo"_json_pointer],
+                              "[json.exception.out_of_range.404] unresolved reference token 'foo'");
+            CHECK_THROWS_AS(j_primitive.at("/foo"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j_primitive.at("/foo"_json_pointer),
+                              "[json.exception.out_of_range.404] unresolved reference token 'foo'");
         }
 
         SECTION("user-defined string literal")
@@ -212,11 +260,16 @@ TEST_CASE("JSON pointers")
 
             // the whole document
             CHECK(j[""_json_pointer] == j);
+            CHECK(j.contains(""_json_pointer));
 
             // array access
             CHECK(j["/foo"_json_pointer] == j["foo"]);
             CHECK(j["/foo/0"_json_pointer] == j["foo"][0]);
             CHECK(j["/foo/1"_json_pointer] == j["foo"][1]);
+            CHECK(j.contains("/foo"_json_pointer));
+            CHECK(j.contains("/foo/0"_json_pointer));
+            CHECK(j.contains("/foo/1"_json_pointer));
+            CHECK(not j.contains("/foo/-"_json_pointer));
         }
     }
 
@@ -245,31 +298,69 @@ TEST_CASE("JSON pointers")
             CHECK(j == json({1, 13, 3, 33, nullptr, 55}));
 
             // error with leading 0
-            CHECK_THROWS_AS(j["/01"_json_pointer], std::domain_error);
-            CHECK_THROWS_WITH(j["/01"_json_pointer], "array index must not begin with '0'");
-            CHECK_THROWS_AS(j_const["/01"_json_pointer], std::domain_error);
-            CHECK_THROWS_WITH(j_const["/01"_json_pointer], "array index must not begin with '0'");
-            CHECK_THROWS_AS(j.at("/01"_json_pointer), std::domain_error);
-            CHECK_THROWS_WITH(j.at("/01"_json_pointer), "array index must not begin with '0'");
-            CHECK_THROWS_AS(j_const.at("/01"_json_pointer), std::domain_error);
-            CHECK_THROWS_WITH(j_const.at("/01"_json_pointer), "array index must not begin with '0'");
+            CHECK_THROWS_AS(j["/01"_json_pointer], json::parse_error&);
+            CHECK_THROWS_WITH(j["/01"_json_pointer],
+                              "[json.exception.parse_error.106] parse error: array index '01' must not begin with '0'");
+            CHECK_THROWS_AS(j_const["/01"_json_pointer], json::parse_error&);
+            CHECK_THROWS_WITH(j_const["/01"_json_pointer],
+                              "[json.exception.parse_error.106] parse error: array index '01' must not begin with '0'");
+            CHECK_THROWS_AS(j.at("/01"_json_pointer), json::parse_error&);
+            CHECK_THROWS_WITH(j.at("/01"_json_pointer),
+                              "[json.exception.parse_error.106] parse error: array index '01' must not begin with '0'");
+            CHECK_THROWS_AS(j_const.at("/01"_json_pointer), json::parse_error&);
+            CHECK_THROWS_WITH(j_const.at("/01"_json_pointer),
+                              "[json.exception.parse_error.106] parse error: array index '01' must not begin with '0'");
+            CHECK_THROWS_AS(j.contains("/01"_json_pointer), json::parse_error&);
+            CHECK_THROWS_WITH(j.contains("/01"_json_pointer),
+                              "[json.exception.parse_error.106] parse error: array index '01' must not begin with '0'");
+            CHECK_THROWS_AS(j_const.contains("/01"_json_pointer), json::parse_error&);
+            CHECK_THROWS_WITH(j_const.contains("/01"_json_pointer),
+                              "[json.exception.parse_error.106] parse error: array index '01' must not begin with '0'");
 
             // error with incorrect numbers
-            CHECK_THROWS_AS(j["/one"_json_pointer] = 1, std::invalid_argument);
+            CHECK_THROWS_AS(j["/one"_json_pointer] = 1, json::parse_error&);
+            CHECK_THROWS_WITH(j["/one"_json_pointer] = 1,
+                              "[json.exception.parse_error.109] parse error: array index 'one' is not a number");
+            CHECK_THROWS_AS(j_const["/one"_json_pointer] == 1, json::parse_error&);
+            CHECK_THROWS_WITH(j_const["/one"_json_pointer] == 1,
+                              "[json.exception.parse_error.109] parse error: array index 'one' is not a number");
+
+            CHECK_THROWS_AS(j.at("/one"_json_pointer) = 1, json::parse_error&);
+            CHECK_THROWS_WITH(j.at("/one"_json_pointer) = 1,
+                              "[json.exception.parse_error.109] parse error: array index 'one' is not a number");
+            CHECK_THROWS_AS(j_const.at("/one"_json_pointer) == 1, json::parse_error&);
+            CHECK_THROWS_WITH(j_const.at("/one"_json_pointer) == 1,
+                              "[json.exception.parse_error.109] parse error: array index 'one' is not a number");
+
+            CHECK_THROWS_AS(j.contains("/one"_json_pointer), json::parse_error&);
+            CHECK_THROWS_WITH(j.contains("/one"_json_pointer),
+                              "[json.exception.parse_error.109] parse error: array index 'one' is not a number");
+            CHECK_THROWS_AS(j_const.contains("/one"_json_pointer), json::parse_error&);
+            CHECK_THROWS_WITH(j_const.contains("/one"_json_pointer),
+                              "[json.exception.parse_error.109] parse error: array index 'one' is not a number");
+
+            CHECK_THROWS_AS(json({{"/list/0", 1}, {"/list/1", 2}, {"/list/three", 3}}).unflatten(), json::parse_error&);
+            CHECK_THROWS_WITH(json({{"/list/0", 1}, {"/list/1", 2}, {"/list/three", 3}}).unflatten(),
+            "[json.exception.parse_error.109] parse error: array index 'three' is not a number");
 
             // assign to "-"
             j["/-"_json_pointer] = 99;
             CHECK(j == json({1, 13, 3, 33, nullptr, 55, 99}));
 
             // error when using "-" in const object
-            CHECK_THROWS_AS(j_const["/-"_json_pointer], std::out_of_range);
-            CHECK_THROWS_WITH(j_const["/-"_json_pointer], "array index '-' (3) is out of range");
+            CHECK_THROWS_AS(j_const["/-"_json_pointer], json::out_of_range&);
+            CHECK_THROWS_WITH(j_const["/-"_json_pointer],
+                              "[json.exception.out_of_range.402] array index '-' (3) is out of range");
+            CHECK(not j_const.contains("/-"_json_pointer));
 
             // error when using "-" with at
-            CHECK_THROWS_AS(j.at("/-"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j.at("/-"_json_pointer), "array index '-' (7) is out of range");
-            CHECK_THROWS_AS(j_const.at("/-"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j_const.at("/-"_json_pointer), "array index '-' (3) is out of range");
+            CHECK_THROWS_AS(j.at("/-"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j.at("/-"_json_pointer),
+                              "[json.exception.out_of_range.402] array index '-' (7) is out of range");
+            CHECK_THROWS_AS(j_const.at("/-"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j_const.at("/-"_json_pointer),
+                              "[json.exception.out_of_range.402] array index '-' (3) is out of range");
+            CHECK(not j_const.contains("/-"_json_pointer));
         }
 
         SECTION("const access")
@@ -282,20 +373,26 @@ TEST_CASE("JSON pointers")
             CHECK(j["/2"_json_pointer] == j[2]);
 
             // assign to nonexisting index
-            CHECK_THROWS_AS(j.at("/3"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j.at("/3"_json_pointer), "array index 3 is out of range");
+            CHECK_THROWS_AS(j.at("/3"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j.at("/3"_json_pointer),
+                              "[json.exception.out_of_range.401] array index 3 is out of range");
+            CHECK(not j.contains("/3"_json_pointer));
 
             // assign to nonexisting index (with gap)
-            CHECK_THROWS_AS(j.at("/5"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j.at("/5"_json_pointer), "array index 5 is out of range");
+            CHECK_THROWS_AS(j.at("/5"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j.at("/5"_json_pointer),
+                              "[json.exception.out_of_range.401] array index 5 is out of range");
+            CHECK(not j.contains("/5"_json_pointer));
 
             // assign to "-"
-            CHECK_THROWS_AS(j["/-"_json_pointer], std::out_of_range);
-            CHECK_THROWS_WITH(j["/-"_json_pointer], "array index '-' (3) is out of range");
-            CHECK_THROWS_AS(j.at("/-"_json_pointer), std::out_of_range);
-            CHECK_THROWS_WITH(j.at("/-"_json_pointer), "array index '-' (3) is out of range");
+            CHECK_THROWS_AS(j["/-"_json_pointer], json::out_of_range&);
+            CHECK_THROWS_WITH(j["/-"_json_pointer],
+                              "[json.exception.out_of_range.402] array index '-' (3) is out of range");
+            CHECK_THROWS_AS(j.at("/-"_json_pointer), json::out_of_range&);
+            CHECK_THROWS_WITH(j.at("/-"_json_pointer),
+                              "[json.exception.out_of_range.402] array index '-' (3) is out of range");
+            CHECK(not j.contains("/-"_json_pointer));
         }
-
     }
 
     SECTION("flatten")
@@ -349,17 +446,20 @@ TEST_CASE("JSON pointers")
         CHECK(j_flatten.unflatten() == j);
 
         // error for nonobjects
-        CHECK_THROWS_AS(json(1).unflatten(), std::domain_error);
-        CHECK_THROWS_WITH(json(1).unflatten(), "only objects can be unflattened");
+        CHECK_THROWS_AS(json(1).unflatten(), json::type_error&);
+        CHECK_THROWS_WITH(json(1).unflatten(),
+                          "[json.exception.type_error.314] only objects can be unflattened");
 
         // error for nonprimitve values
-        CHECK_THROWS_AS(json({{"/1", {1, 2, 3}}}).unflatten(), std::domain_error);
-        CHECK_THROWS_WITH(json({{"/1", {1, 2, 3}}}).unflatten(), "values in object must be primitive");
+        CHECK_THROWS_AS(json({{"/1", {1, 2, 3}}}).unflatten(), json::type_error&);
+        CHECK_THROWS_WITH(json({{"/1", {1, 2, 3}}}).unflatten(),
+        "[json.exception.type_error.315] values in object must be primitive");
 
         // error for conflicting values
         json j_error = {{"", 42}, {"/foo", 17}};
-        CHECK_THROWS_AS(j_error.unflatten(), std::domain_error);
-        CHECK_THROWS_WITH(j_error.unflatten(), "invalid value to unflatten");
+        CHECK_THROWS_AS(j_error.unflatten(), json::type_error&);
+        CHECK_THROWS_WITH(j_error.unflatten(),
+                          "[json.exception.type_error.313] invalid value to unflatten");
 
         // explicit roundtrip check
         CHECK(j.flatten().unflatten() == j);
@@ -388,6 +488,163 @@ TEST_CASE("JSON pointers")
                 })
         {
             CHECK(json::json_pointer(ptr).to_string() == ptr);
+            CHECK(std::string(json::json_pointer(ptr)) == ptr);
         }
+    }
+
+    SECTION("conversion")
+    {
+        SECTION("array")
+        {
+            json j;
+            // all numbers -> array
+            j["/12"_json_pointer] = 0;
+            CHECK(j.is_array());
+        }
+
+        SECTION("object")
+        {
+            json j;
+            // contains a number, but is not a number -> object
+            j["/a12"_json_pointer] = 0;
+            CHECK(j.is_object());
+        }
+    }
+
+    SECTION("empty, push, pop and parent")
+    {
+        const json j =
+        {
+            {"", "Hello"},
+            {"pi", 3.141},
+            {"happy", true},
+            {"name", "Niels"},
+            {"nothing", nullptr},
+            {
+                "answer", {
+                    {"everything", 42}
+                }
+            },
+            {"list", {1, 0, 2}},
+            {
+                "object", {
+                    {"currency", "USD"},
+                    {"value", 42.99},
+                    {"", "empty string"},
+                    {"/", "slash"},
+                    {"~", "tilde"},
+                    {"~1", "tilde1"}
+                }
+            }
+        };
+
+        // empty json_pointer returns the root JSON-object
+        auto ptr = ""_json_pointer;
+        CHECK(ptr.empty());
+        CHECK(j[ptr] == j);
+
+        // simple field access
+        ptr.push_back("pi");
+        CHECK(!ptr.empty());
+        CHECK(j[ptr] == j["pi"]);
+
+        ptr.pop_back();
+        CHECK(ptr.empty());
+        CHECK(j[ptr] == j);
+
+        // object and children access
+        const std::string answer("answer");
+        ptr.push_back(answer);
+        ptr.push_back("everything");
+        CHECK(!ptr.empty());
+        CHECK(j[ptr] == j["answer"]["everything"]);
+
+        // check access via const pointer
+        const auto cptr = ptr;
+        CHECK(cptr.back() == "everything");
+
+        ptr.pop_back();
+        ptr.pop_back();
+        CHECK(ptr.empty());
+        CHECK(j[ptr] == j);
+
+        // push key which has to be encoded
+        ptr.push_back("object");
+        ptr.push_back("/");
+        CHECK(j[ptr] == j["object"]["/"]);
+        CHECK(ptr.to_string() == "/object/~1");
+
+        CHECK(j[ptr.parent_pointer()] == j["object"]);
+        ptr = ptr.parent_pointer().parent_pointer();
+        CHECK(ptr.empty());
+        CHECK(j[ptr] == j);
+        // parent-pointer of the empty json_pointer is empty
+        ptr = ptr.parent_pointer();
+        CHECK(ptr.empty());
+        CHECK(j[ptr] == j);
+
+        CHECK_THROWS_WITH(ptr.pop_back(),
+                          "[json.exception.out_of_range.405] JSON pointer has no parent");
+    }
+
+    SECTION("operators")
+    {
+        const json j =
+        {
+            {"", "Hello"},
+            {"pi", 3.141},
+            {"happy", true},
+            {"name", "Niels"},
+            {"nothing", nullptr},
+            {
+                "answer", {
+                    {"everything", 42}
+                }
+            },
+            {"list", {1, 0, 2}},
+            {
+                "object", {
+                    {"currency", "USD"},
+                    {"value", 42.99},
+                    {"", "empty string"},
+                    {"/", "slash"},
+                    {"~", "tilde"},
+                    {"~1", "tilde1"}
+                }
+            }
+        };
+
+        // empty json_pointer returns the root JSON-object
+        auto ptr = ""_json_pointer;
+        CHECK(j[ptr] == j);
+
+        // simple field access
+        ptr = ptr / "pi";
+        CHECK(j[ptr] == j["pi"]);
+
+        ptr.pop_back();
+        CHECK(j[ptr] == j);
+
+        // object and children access
+        const std::string answer("answer");
+        ptr /= answer;
+        ptr = ptr / "everything";
+        CHECK(j[ptr] == j["answer"]["everything"]);
+
+        ptr.pop_back();
+        ptr.pop_back();
+        CHECK(j[ptr] == j);
+
+        CHECK(ptr / ""_json_pointer == ptr);
+        CHECK(j["/answer"_json_pointer / "/everything"_json_pointer] == j["answer"]["everything"]);
+
+        // list children access
+        CHECK(j["/list"_json_pointer / 1] == j["list"][1]);
+
+        // push key which has to be encoded
+        ptr /= "object";
+        ptr = ptr / "/";
+        CHECK(j[ptr] == j["object"]["/"]);
+        CHECK(ptr.to_string() == "/object/~1");
     }
 }

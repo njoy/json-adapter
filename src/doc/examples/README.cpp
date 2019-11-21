@@ -1,4 +1,6 @@
-#include <json.hpp>
+#include <iostream>
+#include <iomanip>
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -29,7 +31,8 @@ int main()
     j["new"]["key"]["value"] = {"another", "list"};
 
     // count elements
-    j["size"] = j.size();
+    auto s = j.size();
+    j["size"] = s;
 
     // pretty print with indent of 4 spaces
     std::cout << std::setw(4) << j << '\n';
