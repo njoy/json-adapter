@@ -37,6 +37,6 @@ message( STATUS "-----------------------------------------------------------" )
 
 add_library( json-adapter INTERFACE )
 target_sources( json-adapter INTERFACE
-                "${CMAKE_CURRENT_SOURCE_DIR}/src/src/json.hpp" )
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/single_include/nlohmann/json.hpp" )
 
-target_include_directories( json-adapter INTERFACE src/src )              
+target_include_directories( json-adapter INTERFACE src/single_include/nlohmann )              
