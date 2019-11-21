@@ -1,11 +1,12 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (test suite)
-|  |  |__   |  |  | | | |  version 2.1.1
+|  |  |__   |  |  | | | |  version 3.7.3
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 Licensed under the MIT License <http://opensource.org/licenses/MIT>.
-Copyright (c) 2013-2017 Niels Lohmann <http://nlohmann.me>.
+SPDX-License-Identifier: MIT
+Copyright (c) 2013-2019 Niels Lohmann <http://nlohmann.me>.
 
 Permission is hereby  granted, free of charge, to any  person obtaining a copy
 of this software and associated  documentation files (the "Software"), to deal
@@ -26,18 +27,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE  OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "doctest_compatibility.h"
+DOCTEST_GCC_SUPPRESS_WARNING("-Wfloat-equal")
 
-#include "json.hpp"
+#include <nlohmann/json.hpp>
 using nlohmann::json;
 
 #include <deque>
 #include <forward_list>
 #include <list>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 
-TEST_CASE("README", "[hide]")
+#if defined(_MSC_VER)
+    #pragma warning (push)
+    #pragma warning (disable : 4189) // local variable is initialized but not referenced
+#endif
+
+TEST_CASE("README" * doctest::skip())
 {
     {
         // redirect std::cout for the README file
@@ -94,13 +105,20 @@ TEST_CASE("README", "[hide]")
         {
             // ways to express the empty array []
             json empty_array_implicit = {{}};
+            CHECK(empty_array_implicit.is_array());
             json empty_array_explicit = json::array();
+            CHECK(empty_array_explicit.is_array());
 
             // a way to express the empty object {}
             json empty_object_explicit = json::object();
+            CHECK(empty_object_explicit.is_object());
 
             // a way to express an _array_ of key/value pairs [["currency", "USD"], ["value", 42.99]]
-            json array_not_object = { json::array({"currency", "USD"}), json::array({"value", 42.99}) };
+            json array_not_object = json::array({ {"currency", "USD"}, {"value", 42.99} });
+            CHECK(array_not_object.is_array());
+            CHECK(array_not_object.size() == 2);
+            CHECK(array_not_object[0].is_array());
+            CHECK(array_not_object[1].is_array());
         }
 
         {
@@ -139,6 +157,10 @@ TEST_CASE("README", "[hide]")
             j.push_back(1);
             j.push_back(true);
 
+            // comparison
+            bool x = (j == "[\"foo\", 1, true]"_json);  // true
+            CHECK(x == true);
+
             // iterate the array
             for (json::iterator it = j.begin(); it != j.end(); ++it)
             {
@@ -155,15 +177,13 @@ TEST_CASE("README", "[hide]")
             const std::string tmp = j[0];
             j[1] = 42;
             bool foo = j.at(2);
+            CHECK(foo == true);
 
             // other stuff
             j.size();     // 3 entries
             j.empty();    // false
             j.type();     // json::value_t::array
             j.clear();    // the array is empty again
-
-            // comparison
-            bool x = (j == "[\"foo\", 1, true]"_json);  // true
 
             // create an object
             json o;
@@ -244,17 +264,21 @@ TEST_CASE("README", "[hide]")
             bool b1 = true;
             json jb = b1;
             bool b2 = jb;
+            CHECK(b2 == true);
 
             // numbers
             int i = 42;
             json jn = i;
             double f = jn;
+            CHECK(f == 42);
 
             // etc.
 
             std::string vs = js.get<std::string>();
             bool vb = jb.get<bool>();
+            CHECK(vb == true);
             int vi = jn.get<int>();
+            CHECK(vi == 42);
 
             // etc.
         }
@@ -285,7 +309,7 @@ TEST_CASE("README", "[hide]")
             // }
 
             // calculate a JSON patch from two JSON values
-            json::diff(j_result, j_original);
+            auto res = json::diff(j_result, j_original);
             // [
             //   { "op":" replace", "path": "/baz", "value": ["one", "two", "three"] },
             //   { "op":"remove","path":"/hello" },
@@ -297,3 +321,7 @@ TEST_CASE("README", "[hide]")
         std::cout.rdbuf(old_cout_buffer);
     }
 }
+
+#if defined(_MSC_VER)
+    #pragma warning (pop)
+#endif

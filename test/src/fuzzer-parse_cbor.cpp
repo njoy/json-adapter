@@ -1,7 +1,7 @@
 /*
     __ _____ _____ _____
  __|  |   __|     |   | |  JSON for Modern C++ (fuzz test support)
-|  |  |__   |  |  | | | |  version 2.1.1
+|  |  |__   |  |  | | | |  version 3.7.3
 |_____|_____|_____|_|___|  https://github.com/nlohmann/json
 
 This file implements a parser test suitable for fuzz testing. Given a byte
@@ -20,7 +20,7 @@ Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 
 #include <iostream>
 #include <sstream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -41,26 +41,26 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
             // parse serialization
             json j2 = json::from_cbor(vec2);
 
-            // deserializations must match
-            assert(j1 == j2);
+            // serializations must match
+            assert(json::to_cbor(j2) == vec2);
         }
-        catch (const std::invalid_argument&)
+        catch (const json::parse_error&)
         {
             // parsing a CBOR serialization must not fail
             assert(false);
         }
     }
-    catch (const std::invalid_argument&)
+    catch (const json::parse_error&)
     {
         // parse errors are ok, because input may be random bytes
     }
-    catch (const std::out_of_range&)
+    catch (const json::type_error&)
     {
-        // parse errors are ok, because input may be random bytes
+        // type errors can occur during parsing, too
     }
-    catch (const std::domain_error&)
+    catch (const json::out_of_range&)
     {
-        // parse errors are ok, because input may be random bytes
+        // out of range errors can occur during parsing, too
     }
 
     // return 0 - non-zero return values are reserved for future use
