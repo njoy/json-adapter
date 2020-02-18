@@ -1,7 +1,23 @@
 
-cmake_minimum_required( VERSION 3.2 ) 
+cmake_minimum_required( VERSION 3.2 )
 set( CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Supported configuration types" FORCE )
         
+if( NOT is_subproject )
+    if( NOT ROOT_DIRECTORY )
+        set( ROOT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} )
+    endif()
+    if ( NOT PYTHON_EXECUTABLE )
+        find_package( PythonInterp )
+        if ( NOT PYTHONINTERP_FOUND )
+            message( FATAL_ERROR "Python interpreter installation was not found." )
+        endif()
+    endif()
+    execute_process( COMMAND ${PYTHON_EXECUTABLE} ./metaconfigure/signature.py ${CMAKE_BINARY_DIR}/signature
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                        RESULT_VARIABLE signature_failure )
+    file( READ "${CMAKE_BINARY_DIR}/signature.json" SIGNATURE )
+endif()
+
 project( json-adapter LANGUAGES CXX )
 get_directory_property( is_subproject PARENT_DIRECTORY )
 include( CMakeDependentOption REQUIRED )
